@@ -36,10 +36,46 @@ end
 end
 
 
-function [H] = assembleH(n)
+function [A] = assembleA(n, d, h, k)
+L = assembleL(n);
+L = applyBC(L);
+L = (d/h^2)*L;
+A = sparse(k*eye(n) + L);
+end
+
+
+function [H] = assembleH(n, k)
 H = zeros(n, n^2);
 H(:, 1:n+1:end) = eye(n);
-H = sparse(H);
+H = k*sparse(H);
+end
+
+
+function [N, t] = fwdEuler(A, H, tspan, dt)
+% Forward-Euler integrator for "matricized" polynomial system
+% NOTE: cell volume fractions are used (theta = 1)
+% Inputs:
+%   A:          Linera Operator
+%   H:          Quadratic Operator
+%   tspan:      [t0, tf]
+%   dt:         time step
+% Outputs:
+%   N:          matrix of of solution snapshots
+%   t:          solution snapshot times
+
+% simulation times
+t = tspan(1):dt:tspan(2);
+nt = numel(t);
+
+% matrix to store output
+N = zeros(numel(N0), nt);
+N(:,1) = N0;
+
+% forward euler time-stepping
+for i = 1:nt-1
+    N(:, i+1) = N(:, i) + dt*(A*N(:, i) - H*kron(N(:, i), N(:, i)));
+end
+
 end
 
 
