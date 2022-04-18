@@ -84,6 +84,46 @@ N = k*N.*(1 - N/theta);
 end
 
 
+function [N] = treatment(N, C, alpha1, alpha2, beta1, beta2, t)
+    (alpha1*exp(-beta1*t) + alpha2*exp(-beta2*t))*C*N;
+end
+
+
+function [N, t] = FTCS_tx(N0, tspan, txduration, dt, params)
+% Forward-Euler integrator for "matricized" polynomial system
+% NOTE: cell volume fractions are used (theta = 1)
+% Inputs:
+%   N0:         initial condition
+%   txduration: interval between drug doses
+%   tspan:      [t0, tf]
+%   dt:         time step
+%   params:     structure containing treatment parameters
+% Outputs:
+%   N:          matrix of of solution snapshots
+%   t:          solution snapshot times
+
+% simulation times
+t = tspan(1):dt:tspan(2);
+nt = numel(t);
+nt_tx = numel(0:dt:txduration);
+
+% matrix to store output
+N = zeros(numel(N0), nt);
+N(:,1) = N0;
+
+% form operators
+L = assembleL(n);
+L = applyBC(L);
+H = assembleH(n, k);
+
+% forward euler time-stepping
+for i = 1:nt-1
+    N(:, i+1) = N(:, i) + dt*(d/h^2)*L*N(:, i) + dt*k*eye(n)*N(:, i) ...
+        - dt*H*kron(N(:, i), N(:, i)) ...
+        - dt*treatment(N, C, alpha1, alpha2, beta1, beta2, mod(nt, nt_tx));
+end
+end
+
 function [N, t] = FTCS(L, f, N0, tspan, dt, D, h, k, theta)
 % Forward-Euler in Time, Centered Differences in Space
 % Solves the governing equation: u_t = D∆u + ku(1-u/theta)
