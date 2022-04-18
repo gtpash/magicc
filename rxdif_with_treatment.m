@@ -71,11 +71,11 @@ nt = numel(t);
 nt_tx = numel(0:dt:txduration);
 
 % matrix to store output
-n = numel(N0);
-N = zeros(n, nt);
+N = zeros(numel(N0), nt);
 N(:,1) = N0;
 
 % form operators
+n = sqrt(numel(N0));
 L = assembleL(n);
 L = applyBC(L);
 H = assembleH(n, k);
