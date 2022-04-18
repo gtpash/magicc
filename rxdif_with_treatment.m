@@ -10,13 +10,17 @@ Formatting:
     Repeated for each combination of kp and d to be tested
 %}
 
+%% Initializations
+
 clear; clc; close all;
 
-% parameter bounds
-kp_vec = [0.1, 0.2];
-d_vec = [0.1, 0.5, 1.0];
+%  parameter bounds
+kp_vec = linspace(0.001, 0.1, 10);
+d_vec = linspace(1e-6, 1e-3, 100);
 
 n = 50;
+
+viewN = @(N) imagesc(reshape(N, n, n));
 
 % initializations
 N0 = initialize_tumor(n);
@@ -24,14 +28,17 @@ params.dt = 0.1;    % time step [day]
 params.h = 1;       % spatial discretization [mm]
 params.tspan = [0, 56];
 params.k = kp_vec(2);
-params.d = d_vec(3);
+params.d = d_vec(5);
 
 [N, t] = FTCS_tx(N0, params);
 
 cnrg = plotsv(N);
 CNRG_THRESHOLD = 0.99;
 n_cnrg = numel(cnrg(cnrg < CNRG_THRESHOLD));
-fprintf("Modes required for Cumulative Energy to be %.3f:\t%i\n", CNRG_THRESHOLD, n_cnrg);
+fprintf("Modes required for Cumulative Energy to be %.3f:\t%i\n", CNRG_THRESHOLD, n_cnrg+1);
+
+%% Generate Tumor Data
+
 
 % loop through (d, kp) combos
 % for jj = 1:length(d_vec)
@@ -47,6 +54,9 @@ fprintf("Modes required for Cumulative Energy to be %.3f:\t%i\n", CNRG_THRESHOLD
 % 
 %     end
 % end
+
+
+%% Helper Function Definitions
 
 function [N0] = initialize_tumor(n)
 %Initialize 50x50 grid
