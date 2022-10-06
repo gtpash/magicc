@@ -10,51 +10,145 @@ Formatting:
     Repeated for each combination of kp and d to be tested
 %}
 
-%% Initializations
+%% Generate Synthetic Tumor Data (no treatment)
 
 clear; clc; close all;
 
 %  parameter bounds
 kp_vec = linspace(0.001, 0.1, 10);
-d_vec = linspace(1e-6, 1e-3, 100);
+d_vec = linspace(1e-6, 1e-3, 10);
+[kps, ds] = meshgrid(kp_vec, d_vec);
+kd = [kps(:), ds(:)];  % pairs of (k, d)
+nmodes = 0*kps;  % store how many required modes
+
+CNRG_THRESHOLD = 0.99;
 
 n = 50;
 
-viewN = @(N) imagesc(reshape(N, n, n));
+viewN = @(N, nmesh) imagesc(reshape(N, nmesh, nmesh));
 
 % initializations
 N0 = initialize_tumor(n);
 params.dt = 0.1;    % time step [day]
 params.h = 1;       % spatial discretization [mm]
 params.tspan = [0, 56];
-params.k = kp_vec(2);
-params.d = d_vec(5);
 
-[N, t] = FTCS_tx(N0, params);
+% nsnap = params.tspan(end) / params.dt;
+snapmat = [];
 
-cnrg = plotsv(N);
-CNRG_THRESHOLD = 0.99;
+for ii = 1:length(kp_vec)
+    for jj = 1:length(d_vec)
+        params.k = kp_vec(ii);
+        params.d = d_vec(jj);
+
+        [N, t] = FTCS_tx(N0, params);
+        snapmat = [snapmat; N];
+
+        [sv, cnrg] = computesv(N);
+
+        n_cnrg = numel(cnrg(cnrg < CNRG_THRESHOLD));
+        nmodes(ii, jj) = n_cnrg + 1;
+    end
+end
+
+% fprintf("Modes required for Cumulative Energy to be %.3f:\t%i\n", CNRG_THRESHOLD, n_cnrg+1);
+
+%% Plot Singular Value Decay + Cumulative Energy
+
+[sv, cnrg] = computesv(snapmat);
 n_cnrg = numel(cnrg(cnrg < CNRG_THRESHOLD));
-fprintf("Modes required for Cumulative Energy to be %.3f:\t%i\n", CNRG_THRESHOLD, n_cnrg+1);
 
-%% Generate Tumor Data
+figure;
+semilogy(sv/max(sv), '-ok', 'linewidth', 2);
+hold on; grid on;
+semilogy(sv(1:n_cnrg)/max(sv), 'or', 'linewidth', 2);
+xlim([-10, 600]);
+rectangle('Position', [-5, .01, 20, 50], 'linewidth', 2', 'linestyle', '--');
+title('Singular Value Decay of Snapshot Matrix', 'fontsize', 22);
+xlabel('Mode, i', 'interpreter', 'latex', 'fontsize', 20);
+ylabel('Singular Value, $\sigma_i/\|\sigma\|_\infty$', 'interpreter', 'latex', 'fontsize', 20);
 
+figure;
+semilogy(sv(1:15)/max(sv),'-ok','linewidth',2)
+hold on; grid on;
+semilogy(sv(1:n_cnrg)/max(sv), 'or', 'linewidth', 2);
+axis([-5, 20, .01, 50]);
+ax = gca;
+ax.LineWidth = 2;
 
-% loop through (d, kp) combos
-% for jj = 1:length(d_vec)
-%     for ii = 1:length(kp_vec)
-%         kp = kp_vec(ii);
-%         d = d_vec(jj);
-% 
-%         kp_str = replace(num2str(kp,'%.3f'),'.','_');
-%         d_str  = replace(num2str(d,'%.3f'),'.','_');
-%         name = ['kp',kp_str,'d',d_str];
-% 
-%         
-% 
-%     end
-% end
+figure;
+plot(cnrg,'-ok','linewidth',2);
+hold on; grid on;
+plot(cnrg(1:n_cnrg),'or','linewidth',2)
+title('Cumulative Energy', 'fontsize', 22)
+ylabel('Cumulative Energy', 'FontSize', 20);
+xlabel('Mode, i', 'FontSize', 20);
+rectangle('Position', [-5, 0.8, 50, 0.2], 'linewidth', 2', 'linestyle', '--');
+xlim([-10, 600]);
+ylim([0, 1]);
 
+figure;
+plot(cnrg,'-ok','linewidth',3)
+hold on; grid on;
+plot(cnrg(1:n_cnrg),'or','linewidth',3)
+axis([-5, 50 0.8, 1]);
+ax = gca;
+ax.LineWidth = 2;
+
+%% Generate Tumor Data with ChemoTherapy Treatment Terms
+clear; clc; close all;
+
+viewN = @(N, nmesh) imagesc(reshape(N, nmesh, nmesh));
+
+PATIENT_DATA_FILE = "../data/pcr/middle_slice_data_patient290.mat";
+load(PATIENT_DATA_FILE);
+
+CNRG_THRESHOLD = 0.99;
+
+%  parameter bounds
+kp_vec = linspace(0.001, 0.1, 10);
+d_vec = linspace(1e-6, 1e-3, 10);
+[kps, ds] = meshgrid(kp_vec, d_vec);
+kd = [kps(:), ds(:)];  % pairs of (k, d)
+nmodes = 0*kps;  % store how many required modes
+
+% initial condition
+n = 26;             % number of nodes in each dimension
+% N0 = NTC_Visit1;
+% N0 = N0(:);
+N0 = initialize_tumor(n);
+
+params.dt = 0.1;    % time step [day]
+params.h = 1;       % spatial discretization [mm]
+params.tspan = [0, 56];
+params.use_tx = true;
+
+params.txduration = 56/2;
+params.alpha1 = 0.5;
+params.alpha2 = 0.8;
+params.beta1 = 0.3;
+params.beta2 = 1;
+params.C = AUC(:);
+
+snapmat = [];
+
+for ii = 1:length(kp_vec)
+    for jj = 1:length(d_vec)
+        params.k = kp_vec(ii);
+        params.d = d_vec(jj);
+
+        [N, t] = FTCS_tx(N0, params);
+        snapmat = [snapmat; N];
+
+        [sv, cnrg] = computesv(N);
+
+        n_cnrg = numel(cnrg(cnrg < CNRG_THRESHOLD));
+        nmodes(ii, jj) = n_cnrg + 1;
+    end
+end
+
+[sv, cnrg] = computesv(snapmat);
+plotsv(sv, cnrg);
 
 %% Helper Function Definitions
 
@@ -93,8 +187,8 @@ for i = 1:n:n^2
 end
 
 % Apply BC to right wall
-for i = 1:n:n^2
-    L(i, i+1) = 2;
+for i = n:n:n^2
+    L(i, i-1) = 2;
 end
 
 % Apply BC to bottom wall
@@ -103,7 +197,7 @@ for i = 1:n
 end
 
 % Apply BC to top wall
-for i = 1:n
+for i = 0:n
     L(end-i, end-i-n) = 2;
 end
 end
@@ -116,8 +210,8 @@ H = k*sparse(H);
 end
 
 
-function [N] = treatment(N, C, alpha1, alpha2, beta1, beta2, t)
-    (alpha1*exp(-beta1*t) + alpha2*exp(-beta2*t))*C*N;
+function [N] = apply_treatment(N, C, alpha1, alpha2, beta1, beta2, t)
+    N = (alpha1*exp(-beta1*t) + alpha2*exp(-beta2*t))*C.*N;
 end
 
 
@@ -143,18 +237,19 @@ h = params.h;
 k = params.k;
 d = params.d;
 theta = 1;
-if isfield(params, 'treatment')
-    treatment = params.treatment;
+if isfield(params, 'use_tx')
+    use_tx = params.use_tx;
 else
-    treatment = false;
+    use_tx = false;
 end
-if treatment
+if use_tx
     txduration = params.txduration;
     alpha1 = params.alpha1;
     alpha2 = params.alpha2;
     beta1 = params.beta1;
     beta2 = params.beta2;
     nt_tx = numel(0:dt:txduration);
+    C = params.C;
 end
 
 % simulation times
@@ -172,32 +267,39 @@ L = applyBC(L);
 
 % forward euler time-stepping
 for i = 1:nt-1
-    if treatment
-        treat = dt*treatment(N, C, alpha1, alpha2, beta1, beta2, mod(nt, nt_tx));
+    if use_tx
+        treat = dt*apply_treatment(N(:,i), C, alpha1, alpha2, beta1, beta2, mod(i, nt_tx));
     else
         treat = 0;
     end
 
     N(:, i+1) = N(:, i) + dt*(d/h^2)*L*N(:, i) + proliferation(N(:, i), k, theta) - treat;
 %     N(:, i+1) = N(:, i) + dt*(d/h^2)*L*N(:, i) + dt*k*eye(n)*N(:, i) ...
-%         - dt*H*kron(N(:, i), N(:, i)) - treat;    
+%         - dt*H*kron(N(:, i), N(:, i)) - treat;
 
 end
 end
 
-function [cnrg] = plotsv(N)
+
+function [sv, cnrg] = computesv(N)
     sv = svd(N);
-    figure; 
-    semilogy(sv/max(sv), 'k', 'linewidth', 3);
-    title('Singular Value Decay of Snapshot Matrix');
-    xlabel('i');
-    ylabel('$\sigma_i/\|\sigma\|_\infty$', 'interpreter', 'latex');
 
-    figure;
     cnrg = cumsum(sv.^2);
     cnrg = cnrg/cnrg(end);
+end
+
+function [cnrg] = plotsv(sv, cnrg)
+    figure; 
+    semilogy(sv/max(sv), 'k', 'linewidth', 3);
+    title('Singular Value Decay of Snapshot Matrix', 'fontsize', 22);
+    xlabel('i', 'interpreter', 'latex', 'fontsize', 16);
+    ylabel('$\sigma_i/\|\sigma\|_\infty$', 'interpreter', 'latex', 'fontsize', 16);
+
+    figure;
     plot(cnrg, 'kx', 'LineWidth', 3);
+    title('Cumulative Energy', 'fontsize', 22)
     ylabel('Cumulative Energy', 'interpreter', 'latex', 'FontSize', 16);
     ylim([0, 1]);
     xlabel('$i$', 'interpreter', 'latex', 'FontSize', 16);
 end
+
